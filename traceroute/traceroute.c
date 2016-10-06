@@ -746,7 +746,7 @@ static void print_addr (sockaddr_any *res) {
 	if (noresolve)
 	{
 		if(jsonoutput)
-			printf (", \"ip\":\"%s\", ", str);
+			printf (", \"ip\":\"%s\"", str);
 		else 
 			printf (" %s", str);
 	}
@@ -835,7 +835,7 @@ static void print_probe (probe *pb) {
 				int hops = ttl2hops (pb->recv_ttl);
 				if (hops != ttl)  
 					if(jsonoutput)
-						printf (", \"skip\": %d", hops);
+						printf (", \"hops\": -%d", hops);
 					else 
 						printf (" '-%d'", hops);
 			}
