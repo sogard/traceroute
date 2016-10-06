@@ -746,7 +746,7 @@ static void print_addr (sockaddr_any *res) {
 	if (noresolve)
 	{
 		if(jsonoutput)
-			printf ("\"ip\":\"%s\"", str);
+			printf (", \"ip\":\"%s\"", str);
 		else 
 			printf (" %s", str);
 	}
@@ -758,7 +758,7 @@ static void print_addr (sockaddr_any *res) {
 							    0, 0, NI_IDN);
 		if(jsonoutput)
 		{
-			printf ("\"ip\":\"%s\"", str);
+			printf (", \"ip\":\"%s\"", str);
 			if(buf[0])
 				printf (", \"host\":\"%s\"", buf);
 		}
