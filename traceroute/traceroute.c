@@ -841,7 +841,7 @@ static void print_probe_json (probe *pb) {
 	{
 		if(0 != jsonprobe_nr)
 		{
-			printf("},\n");
+			printf("],\n");
 		}
 		jsonprobe_nr++;
 		printf("\t\t[{");		
@@ -889,7 +889,7 @@ static void print_probe_json (probe *pb) {
 static void print_end (void) {
 
 	if(jsonoutput)
-		printf ("}\n\t]\n}\n");
+		printf ("]\n\t]\n}\n");
 	else 
 		printf ("\n");
 }
