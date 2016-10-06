@@ -131,7 +131,8 @@ static const tr_module *ops = NULL;
 
 static char *opts[16] = { NULL, };	/*  assume enough   */
 static unsigned int opts_idx = 1;	/*  first one reserved...   */
-
+static int jsonoutput = 0;
+static int jsonprobe_printed = 0;
 
 static int af = 0;
 
@@ -587,6 +588,9 @@ static CLIF_option option_list[] = {
 	{ 0, "back", 0, "Guess the number of hops in the backward path "
 			    "and print if it differs",
 			    CLIF_set_flag, &backward, 0, CLIF_EXTRA },
+	{ "j", "json", 0, "Output json output",
+				CLIF_set_flag, &jsonoutput, 0, 0 },
+
 	CLIF_VERSION_OPTION (version_string),
 	CLIF_HELP_OPTION,
 	CLIF_END_OPTION
@@ -709,9 +713,23 @@ int main (int argc, char *argv[]) {
 static void print_header (void) {
 
 	/*  Note, without ending new-line!  */
-	printf ("traceroute to %s (%s), %u hops max, %zu byte packets",
-				dst_name, addr2str (&dst_addr), max_hops,
-				header_len + data_len);
+	if(jsonoutput)
+	{
+		printf("{\n"
+			"\t\"ip\": \"%s\",\n"
+			"\t\"name\": \"%s\",\n"
+			"\t\"hops_max\": %u,\n"
+			"\t\"byte_packets\": %zu,\n" 
+			"\t\"probes\": [\n", 
+			dst_name, addr2str (&dst_addr), max_hops,	header_len + data_len
+			);
+	}
+	else 
+	{
+		printf ("traceroute to %s (%s), %u hops max, %zu byte packets",
+			dst_name, addr2str (&dst_addr), max_hops,
+			header_len + data_len);
+	}
 	fflush (stdout);
 }
 
@@ -726,18 +744,34 @@ static void print_addr (sockaddr_any *res) {
 
 
 	if (noresolve)
-		printf (" %s", str);
+	{
+		if(jsonoutput)
+			printf (", \"ip\":\"%s\", ", str);
+		else 
+			printf (" %s", str);
+	}
 	else {
 	    char buf[1024];
 
 	    buf[0] = '\0';
 	    getnameinfo (&res->sa, sizeof (*res), buf, sizeof (buf),
 							    0, 0, NI_IDN);
-	    printf (" %s (%s)", buf[0] ? buf : str, str);
+		if(jsonoutput)
+		{
+			printf (", \"ip\":\"%s\"", str);
+			if(buf[0])
+				printf (", \"host\":\"%s\"", buf);
+		}
+		else 
+			printf (" %s (%s)", buf[0] ? buf : str, str);
 	}
 
 	if (as_lookups)
-		printf (" [%s]", get_as_path (str));
+		if(jsonoutput)
+			printf (", \"as_path\":\"%s\"", get_as_path (str));
+		else 
+			printf (" [%s]", get_as_path (str));
+
 }
 
 
@@ -746,8 +780,23 @@ static void print_probe (probe *pb) {
 	unsigned int ttl = idx / probes_per_hop + 1;
 	unsigned int np = idx % probes_per_hop;
 
-	if (np == 0)
-		printf ("\n%2u ", ttl);
+	if(jsonoutput)
+		if(pb->res.sa.sa_family)
+		{
+			if(0 == jsonprobe_printed)
+				printf("\t\t{\"idx\": %d", idx);
+			else 
+				printf(",\n\t\t{\"idx\": %d", idx);
+			jsonprobe_printed++;
+		}
+		else 
+			return;
+	
+	else if (np == 0)
+		if(jsonoutput)
+			printf (", \"ttl\": %u,", ttl);
+		else 
+			printf ("\n%2u ", ttl);
 
 
 	if (!pb->res.sa.sa_family)
@@ -756,41 +805,61 @@ static void print_probe (probe *pb) {
 	    int prn = !np;	/*  print if the first...  */
 
 	    if (np) {	    /*  ...and if differs with previous   */
-		probe *p;
+			probe *p;
 
-		/*  skip expired   */
-		for (p = pb - 1; np && !p->res.sa.sa_family; p--, np--) ;
+			/*  skip expired   */
+			for (p = pb - 1; np && !p->res.sa.sa_family; p--, np--) ;
 
-		if (!np ||
-		    !equal_addr (&p->res, &pb->res) ||
-		    (p->ext != pb->ext &&
-			!(p->ext && pb->ext && !strcmp (p->ext, pb->ext))) ||
-		    (backward && p->recv_ttl != pb->recv_ttl)
-		)  prn = 1;
+			if (!np ||
+				!equal_addr (&p->res, &pb->res) ||
+				(p->ext != pb->ext &&
+				!(p->ext && pb->ext && !strcmp (p->ext, pb->ext))) ||
+				(backward && p->recv_ttl != pb->recv_ttl)
+			) 
+				prn = 1;
 	    }
 
-	    if (prn) {
-		print_addr (&pb->res);
+	    if (prn) 
+		{
+			print_addr (&pb->res);
+			
+			if (pb->ext)
+				if(jsonoutput)
+					printf (" <%s>", pb->ext);
+				else 
+					printf (", \"ext\": \"%s\"", pb->ext);
 
-		if (pb->ext)  printf (" <%s>", pb->ext);
 
-		if (backward && pb->recv_ttl) {
-		    int hops = ttl2hops (pb->recv_ttl);
-		    if (hops != ttl)  printf (" '-%d'", hops);
-		}
+			if (backward && pb->recv_ttl) 
+			{
+				int hops = ttl2hops (pb->recv_ttl);
+				if (hops != ttl)  
+					if(jsonoutput)
+						printf (", \"skip\": %d", hops);
+					else 
+						printf (" '-%d'", hops);
+			}
 	    }
 	}
 
 
 	if (pb->recv_time) {
-	    double diff = pb->recv_time - pb->send_time;
-
-	    printf ("  %.3f ms", diff * 1000);
+	    double diff = pb->recv_time - pb->send_time;		
+		if(jsonoutput)
+			printf (", \"time\": %f", diff * 1000);
+		else 
+			printf ("  %.3f ms", diff * 1000);
 	}
 
 	if (pb->err_str[0])
-		printf (" %s", pb->err_str);
+		if(jsonoutput)
+			printf (", \"error\": \"%s\"", pb->err_str);
+		else 
+			printf (" %s", pb->err_str);
 
+
+	if(jsonoutput)
+		printf("}");
 
 	fflush (stdout);
 
@@ -800,7 +869,10 @@ static void print_probe (probe *pb) {
 
 static void print_end (void) {
 
-	printf ("\n");
+	if(jsonoutput)
+		printf ("\n\t]\n}\n");
+	else 
+		printf ("\n");
 }
 
 
