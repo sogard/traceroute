@@ -132,7 +132,7 @@ static const tr_module *ops = NULL;
 static char *opts[16] = { NULL, };	/*  assume enough   */
 static unsigned int opts_idx = 1;	/*  first one reserved...   */
 static int jsonoutput = 0;
-static int jsonprobe_printed = 0;
+static int jsonprobe_nr = 0;
 
 static int af = 0;
 
@@ -746,7 +746,7 @@ static void print_addr (sockaddr_any *res) {
 	if (noresolve)
 	{
 		if(jsonoutput)
-			printf (", \"ip\":\"%s\"", str);
+			printf ("\"ip\":\"%s\"", str);
 		else 
 			printf (" %s", str);
 	}
@@ -758,7 +758,7 @@ static void print_addr (sockaddr_any *res) {
 							    0, 0, NI_IDN);
 		if(jsonoutput)
 		{
-			printf (", \"ip\":\"%s\"", str);
+			printf ("\"ip\":\"%s\"", str);
 			if(buf[0])
 				printf (", \"host\":\"%s\"", buf);
 		}
@@ -774,37 +774,21 @@ static void print_addr (sockaddr_any *res) {
 
 }
 
-
 static void print_probe (probe *pb) {
 	unsigned int idx = (pb - probes);
 	unsigned int ttl = idx / probes_per_hop + 1;
 	unsigned int np = idx % probes_per_hop;
 
-	if(jsonoutput)
-		if(pb->res.sa.sa_family)
-		{
-			if(0 == jsonprobe_printed)
-				printf("\t\t{\"idx\": %d", idx);
-			else 
-				printf(",\n\t\t{\"idx\": %d", idx);
-			jsonprobe_printed++;
-		}
-		else 
-			return;
-	
 	if (np == 0)
-		if(jsonoutput)
-			printf (", \"ttl\": %u,", ttl);
-		else 
-			printf ("\n%2u ", ttl);
+		printf ("\n%2u ", ttl);
 
 
 	if (!pb->res.sa.sa_family)
 		printf (" *");
 	else {
-	    int prn = !np;	/*  print if the first...  */
+		int prn = !np;	/*  print if the first...  */
 
-	    if (np) {	    /*  ...and if differs with previous   */
+		if (np) {	    /*  ...and if differs with previous   */
 			probe *p;
 
 			/*  skip expired   */
@@ -815,51 +799,86 @@ static void print_probe (probe *pb) {
 				(p->ext != pb->ext &&
 				!(p->ext && pb->ext && !strcmp (p->ext, pb->ext))) ||
 				(backward && p->recv_ttl != pb->recv_ttl)
-			) 
-				prn = 1;
-	    }
+				)  prn = 1;
+		}
 
-	    if (prn) 
-		{
+		if (prn) {
 			print_addr (&pb->res);
-			
-			if (pb->ext)
-				if(jsonoutput)
-					printf (" <%s>", pb->ext);
-				else 
-					printf (", \"ext\": \"%s\"", pb->ext);
 
+			if (pb->ext)  printf (" <%s>", pb->ext);
 
-			if (backward && pb->recv_ttl) 
-			{
+			if (backward && pb->recv_ttl) {
 				int hops = ttl2hops (pb->recv_ttl);
-				if (hops != ttl)  
-					if(jsonoutput)
-						printf (", \"hops\": -%d", hops);
-					else 
-						printf (" '-%d'", hops);
+				if (hops != ttl)  printf (" '-%d'", hops);
 			}
-	    }
+		}
 	}
 
 
 	if (pb->recv_time) {
-	    double diff = pb->recv_time - pb->send_time;		
-		if(jsonoutput)
-			printf (", \"time\": %f", diff * 1000);
-		else 
-			printf ("  %.3f ms", diff * 1000);
+		double diff = pb->recv_time - pb->send_time;
+
+		printf ("  %.3f ms", diff * 1000);
 	}
 
 	if (pb->err_str[0])
-		if(jsonoutput)
-			printf (", \"error\": \"%s\"", pb->err_str);
-		else 
-			printf (" %s", pb->err_str);
+		printf (" %s", pb->err_str);
 
 
-	if(jsonoutput)
-		printf("}");
+	fflush (stdout);
+
+	return;
+}
+
+
+static void print_probe_json (probe *pb) {
+	unsigned int idx = (pb - probes);
+	unsigned int ttl = idx / probes_per_hop + 1;
+	unsigned int np = idx % probes_per_hop;
+
+
+	if (np == 0)
+	{
+		if(0 != jsonprobe_nr)
+		{
+			printf("},\n");
+		}
+		jsonprobe_nr++;
+		printf("\t\t[{");		
+	}
+	else 
+		printf(",{");
+
+	if (!pb->res.sa.sa_family)
+	{
+		printf ("\"valid\": false}");
+		return;
+	}
+
+	printf ("\"valid\": true");
+
+	print_addr (&pb->res);
+		
+	if (pb->ext)
+		printf (", \"ext\": \"%s\"", pb->ext);
+
+	if (backward && pb->recv_ttl) 
+	{
+		int hops = ttl2hops (pb->recv_ttl);
+		if (hops != ttl)  
+					printf (", \"hops\": -%d", hops);
+    }
+
+
+	if (pb->recv_time) {
+	    double diff = pb->recv_time - pb->send_time;		
+		printf (", \"time\": %f", diff * 1000);
+	}
+
+	if (pb->err_str[0])
+		printf (", \"error\": \"%s\"", pb->err_str);
+
+	printf("}");
 
 	fflush (stdout);
 
@@ -870,7 +889,7 @@ static void print_probe (probe *pb) {
 static void print_end (void) {
 
 	if(jsonoutput)
-		printf ("\n\t]\n}\n");
+		printf ("}\n\t]\n}\n");
 	else 
 		printf ("\n");
 }
@@ -1121,7 +1140,10 @@ static void do_it (void) {
 		if (pb->done) {
 
 		    if (n == start) {	/*  can print it now   */
-			print_probe (pb);
+				if(jsonoutput)
+					print_probe (pb);
+				else 
+					print_probe_json (pb);
 			start++;
 		    }
 
