@@ -792,7 +792,7 @@ static void print_probe (probe *pb) {
 		else 
 			return;
 	
-	else if (np == 0)
+	if (np == 0)
 		if(jsonoutput)
 			printf (", \"ttl\": %u,", ttl);
 		else 
