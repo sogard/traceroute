@@ -1141,9 +1141,10 @@ static void do_it (void) {
 
 		    if (n == start) {	/*  can print it now   */
 				if(jsonoutput)
-					print_probe (pb);
-				else 
 					print_probe_json (pb);
+				else
+					print_probe (pb);
+					
 			start++;
 		    }
 
